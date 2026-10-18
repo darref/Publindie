@@ -105,6 +105,10 @@ def cmd_reseaux(a):
 
 
 def main(argv=None):
+    # ⚠ LA CONSOLE DE WINDOWS EST EN cp1252 : les coches (✓ ✗ ⚠) y levaient une erreur d'encodage (vu sur le PC).
+    for flux in (sys.stdout, sys.stderr):
+        if hasattr(flux, "reconfigure"):
+            flux.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(prog="publindie", description="Les outils de publication d'un studio indé.")
     sp = ap.add_subparsers(dest="cmd", required=True)
     sp.add_parser("chemins").set_defaults(f=lambda a: C.main())
