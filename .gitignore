@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+# Aucun média ici : ils vivent dans le dossier du studio (SpannerGames), hors de ce dépôt — et jamais en LFS.
+*.mp4
+*.gif
+*.avi
+*.mkv
+*.wav
+*.mp3
+*.zip
