@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """L'ALIGNEMENT — la règle de `SpannerGames/CLAUDE.md` §0 (Jordan, 19 octobre 2026), en une commande, SUR LE PC.
 
-    python -m publindie aligner                       # tout : pousser, exporter ce qui a changé, Publindie, le site
+    python -m publindie aligner                       # tout : pousser, exporter ce qui a changé, itch.io, Publindie, le site
     python -m publindie aligner --etapes pousser,site # seulement ces étapes
     python -m publindie aligner --commiter Pix WaterDrop   # commite aussi le travail en cours de ces dépôts
     python -m publindie aligner --forcer SoluTiles    # réexporte même si le commit n'a pas bougé
@@ -214,6 +214,62 @@ def exporter(depots, exports, forcer=(), essai=False, date=None, seulement=()):
     return lignes, livrables
 
 
+# ── 2 bis. itch.io ───────────────────────────────────────────────────────────────────────────────────────────────────
+
+BUTLER = r"C:/Users/jorda/butler/butler.exe"
+
+
+def itch(regles, exports, essai=False, date=None):
+    """Pousse sur itch.io (butler) les exports NEUFS : un projet part quand le commit de son dernier export n'est pas celui
+    de son dernier envoi (`ATELIER/<P>/builds/DERNIER_ITCH.txt`). Un canal `payant` ne part que si sa `garde` (un fichier
+    de la sortie) ne contient plus « COMPL » (les blancs [À COMPLÉTER] du contrat).
+    ⚠ butler ne coche pas « This file is a demo » : un canal neuf se règle UNE FOIS sur le web (la case reste ensuite)."""
+    lignes = []
+    butler = C.OUTILS.get("butler", BUTLER)
+    for nom, r in regles.items():
+        atelier = os.path.join(C.RACINE, exports[nom]["atelier"])
+        exp = _dernier(atelier)
+        f_itch = os.path.join(atelier, "DERNIER_ITCH.txt")
+        avant = json.load(open(f_itch, encoding="utf-8")) if os.path.isfile(f_itch) else {}
+        if not exp.get("commit"):
+            lignes.append((nom, "rien", "jamais exporté par l'alignement"))
+            continue
+        if avant.get("commit") == exp["commit"]:
+            lignes.append((nom, "à jour", "le commit %s est déjà sur itch (%s)" % (exp["commit"], avant.get("date", "?"))))
+            continue
+        v = exp.get("version", "")
+        partis, fautes = [], []
+        for page, canaux in r["pages"].items():
+            for canal, c in canaux.items():
+                c = c if isinstance(c, dict) else {"chemin": c}
+                chemin = os.path.join(atelier, c["chemin"].format(version=v))
+                if c.get("garde"):
+                    g = os.path.join(atelier, c["garde"].format(version=v))
+                    if not os.path.isfile(g) or "COMPL" in open(g, encoding="utf-8", errors="replace").read():
+                        lignes.append((nom, "retenu", "%s:%s — le contrat a encore des blancs (%s)" % (page, canal, g)))
+                        continue
+                if not os.path.exists(chemin):
+                    fautes.append("%s:%s — %s absent" % (page, canal, chemin))
+                    continue
+                if essai:
+                    partis.append("%s:%s" % (page, canal))
+                    continue
+                p = subprocess.run([butler, "push", chemin, "%s:%s" % (page, canal), "--userversion", v],
+                                   capture_output=True, text=True, encoding="utf-8", errors="replace")
+                if p.returncode != 0:
+                    fautes.append("%s:%s — butler : %s" % (page, canal, (p.stderr or p.stdout).strip()[-200:]))
+                else:
+                    partis.append("%s:%s" % (page, canal))
+        if fautes:
+            lignes.append((nom, "ÉCHEC", " ; ".join(fautes)))
+        if partis:
+            lignes.append((nom, "à pousser (essai)" if essai else "poussé", "%s en %s" % (", ".join(partis), v)))
+        if not essai and not fautes and partis:
+            json.dump({"date": date, "commit": exp["commit"], "version": v, "canaux": partis},
+                      open(f_itch, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    return lignes
+
+
 # ── 3. Publindie ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
 def publindie_a_faire(depuis_jours=7):
@@ -292,7 +348,7 @@ def site(regle, essai=False):
 
 # ── tout ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-def aligner(etapes=("pousser", "exporter", "publindie", "site"), commiter=(), forcer=(), essai=False, seulement=()):
+def aligner(etapes=("pousser", "exporter", "itch", "publindie", "site"), commiter=(), forcer=(), essai=False, seulement=()):
     conf = _conf()
     date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     dossier = os.path.join(C.RACINE, "ATELIER", "alignement")
@@ -304,6 +360,8 @@ def aligner(etapes=("pousser", "exporter", "publindie", "site"), commiter=(), fo
     if "exporter" in etapes:
         l, livrables = exporter(conf["depots"], conf.get("exports", {}), forcer, essai, date, seulement)
         rapport.append(("2. Exporter", l))
+    if "itch" in etapes and conf.get("itch"):
+        rapport.append(("2 bis. itch.io", itch(conf["itch"], conf.get("exports", {}), essai, date)))
     if "publindie" in etapes:
         rapport.append(("3. Publindie", publindie_a_faire()))
     if "site" in etapes and conf.get("site"):
@@ -326,7 +384,7 @@ def aligner(etapes=("pousser", "exporter", "publindie", "site"), commiter=(), fo
         json.dump({"date": date, "exports": livrables, "medias": neufs},
                   open(os.path.join(C.RACINE, conf.get("livrables", "ATELIER/alignement/livrables.json")), "w",
                        encoding="utf-8"), ensure_ascii=False, indent=1)
-        if set(etapes) >= {"pousser", "exporter", "publindie", "site"}:      # seul un alignement COMPLET fait date
+        if set(etapes) >= {"pousser", "exporter", "itch", "publindie", "site"}:      # seul un alignement COMPLET fait date
             json.dump({"date": date, "horodatage": time.time()}, open(trace, "w", encoding="utf-8"))
     print("\n".join(texte))
     bloques = sum(1 for _, ls in rapport for l in ls if l[1] in ("BLOQUÉ", "ÉCHEC", "ÉCHEC de construction"))
