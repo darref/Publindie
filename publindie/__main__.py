@@ -152,7 +152,7 @@ def cmd_capturer(a):
 def cmd_aligner(a):
     from publindie import alignement as AL
     etapes = tuple(x.strip() for x in a.etapes.split(","))
-    return AL.aligner(etapes, a.commiter or (), a.forcer or (), a.essai)
+    return AL.aligner(etapes, a.commiter or (), a.forcer or (), a.essai, a.seulement or ())
 
 
 def main(argv=None):
@@ -185,6 +185,7 @@ def main(argv=None):
     c.set_defaults(f=cmd_capturer)
     c = sp.add_parser("aligner"); c.add_argument("--etapes", default="pousser,exporter,publindie,site")
     c.add_argument("--commiter", nargs="*"); c.add_argument("--forcer", nargs="*")
+    c.add_argument("--seulement", nargs="*", help="n'exporter que ces projets")
     c.add_argument("--essai", action="store_true"); c.set_defaults(f=cmd_aligner)
     a = ap.parse_args(argv)
     return a.f(a) or 0

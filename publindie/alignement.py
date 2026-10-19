@@ -6,6 +6,7 @@
     python -m publindie aligner --commiter Pix WaterDrop   # commite aussi le travail en cours de ces dépôts
     python -m publindie aligner --forcer SoluTiles    # réexporte même si le commit n'a pas bougé
     python -m publindie aligner --essai               # dit ce qu'il ferait, ne touche à rien
+    python -m publindie aligner --etapes exporter --seulement SoluTiles   # un seul projet
 
 Ce que dit `publindie.json` (clé `alignement`) : les dépôts, les exports de chaque projet (presets Godot ou commande du
 projet), le site. Le rapport s'écrit dans `<studio>/ATELIER/alignement/<date>.md`, et la liste des LIVRABLES à rapatrier
@@ -146,9 +147,11 @@ def editeur_ouvert(depot):
     return None
 
 
-def exporter(depots, exports, forcer=(), essai=False, date=None):
+def exporter(depots, exports, forcer=(), essai=False, date=None, seulement=()):
     lignes, livrables = [], []
     for nom, regle in exports.items():
+        if seulement and nom not in seulement:
+            continue
         depot = depots.get(nom)
         atelier = os.path.join(C.RACINE, regle["atelier"])
         if not depot or not os.path.isdir(depot):
@@ -285,7 +288,7 @@ def site(regle, essai=False):
 
 # ── tout ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-def aligner(etapes=("pousser", "exporter", "publindie", "site"), commiter=(), forcer=(), essai=False):
+def aligner(etapes=("pousser", "exporter", "publindie", "site"), commiter=(), forcer=(), essai=False, seulement=()):
     conf = _conf()
     date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     dossier = os.path.join(C.RACINE, "ATELIER", "alignement")
@@ -297,7 +300,7 @@ def aligner(etapes=("pousser", "exporter", "publindie", "site"), commiter=(), fo
     if "pousser" in etapes:
         rapport.append(("1. Pousser", pousser(conf["depots"], commiter, essai, date[:10])))
     if "exporter" in etapes:
-        l, livrables = exporter(conf["depots"], conf.get("exports", {}), forcer, essai, date)
+        l, livrables = exporter(conf["depots"], conf.get("exports", {}), forcer, essai, date, seulement)
         rapport.append(("2. Exporter", l))
     if "publindie" in etapes:
         rapport.append(("3. Publindie", publindie_a_faire()))
