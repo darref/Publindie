@@ -297,8 +297,6 @@ def aligner(etapes=("pousser", "exporter", "publindie", "site"), commiter=(), fo
     dossier = os.path.join(C.RACINE, "ATELIER", "alignement")
     os.makedirs(dossier, exist_ok=True)
     trace = os.path.join(dossier, "dernier.json")
-    precedent = json.load(open(trace, encoding="utf-8")) if os.path.isfile(trace) else {}
-    depuis = precedent.get("horodatage", time.time() - 7 * 86400)
     rapport, livrables = [], []
     if "pousser" in etapes:
         rapport.append(("1. Pousser", pousser(conf["depots"], commiter, essai, date[:10])))
@@ -309,11 +307,16 @@ def aligner(etapes=("pousser", "exporter", "publindie", "site"), commiter=(), fo
         rapport.append(("3. Publindie", publindie_a_faire()))
     if "site" in etapes and conf.get("site"):
         rapport.append(("4. Le site", site(conf["site"], essai)))
-    neufs = medias_neufs(depuis)
+    # LA LISTE DES LIVRABLES NE DÉPEND PAS DES ÉTAPES LANCÉES : le dernier export de CHAQUE projet (son DERNIER_EXPORT.txt)
+    # et les médias des 14 derniers jours. Un alignement partiel (le site seul) l'effaçait (vu le 19 octobre 2026) ; le
+    # téléphone ne recopie pas un fichier de même taille, donc rien ne part deux fois.
+    livrables = sorted({f for r in conf.get("exports", {}).values()
+                        for f in _dernier(os.path.join(C.RACINE, r["atelier"])).get("sorties", [])} | set(livrables))
+    neufs = medias_neufs(time.time() - 14 * 86400)
     texte = ["# Alignement du %s%s" % (date, " (ESSAI : rien n'a été touché)" if essai else ""), ""]
     for titre, lignes in rapport:
         texte += ["## " + titre, ""] + ["- **%s** — %s : %s" % l for l in lignes] + [""]
-    texte += ["## Livrables à rapatrier", "", "%d export(s), %d média(s) neuf(s) depuis le dernier alignement"
+    texte += ["## Livrables à rapatrier", "", "%d fichier(s) d'export, %d média(s) des 14 derniers jours"
               % (len(livrables), len(neufs)), ""]
     if not essai:
         with open(os.path.join(dossier, date[:10] + ".md"), "w", encoding="utf-8") as f:
