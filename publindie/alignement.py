@@ -247,10 +247,11 @@ def publindie_a_faire(depuis_jours=7):
 def medias_neufs(depuis):
     """Les GIF, Shorts, vidéos et lots de vitrine produits depuis `depuis` (horodatage) : ce qui part sur le téléphone."""
     sortie = []
-    for motif in ("PROJETS/*/04_exports/**/*.gif", "PROJETS/*/04_exports/**/*.mp4", "PROJETS/*/06_boutique/*/lot/*",
+    # ⚠ PAS LES VIDÉOS LONGUES : avec elles, 135 fichiers et 7 Go partaient sur le téléphone (mesuré le 19 octobre 2026).
+    for motif in ("PROJETS/*/04_exports/**/*.gif", "PROJETS/*/04_exports/shorts/*.mp4", "PROJETS/*/06_boutique/*/lot/*",
                   "PROJETS/*/05_miniatures/*.png"):
         for f in glob.glob(os.path.join(C.RACINE, motif), recursive=True):
-            if os.path.isfile(f) and os.path.getmtime(f) > depuis and os.path.getsize(f) < 300e6:
+            if os.path.isfile(f) and os.path.getmtime(f) > depuis and os.path.getsize(f) < 60e6:
                 sortie.append(os.path.relpath(f, C.RACINE).replace("\\", "/"))
     return sorted(sortie)
 
@@ -308,15 +309,16 @@ def aligner(etapes=("pousser", "exporter", "publindie", "site"), commiter=(), fo
     if "site" in etapes and conf.get("site"):
         rapport.append(("4. Le site", site(conf["site"], essai)))
     # LA LISTE DES LIVRABLES NE DÉPEND PAS DES ÉTAPES LANCÉES : le dernier export de CHAQUE projet (son DERNIER_EXPORT.txt)
-    # et les médias des 14 derniers jours. Un alignement partiel (le site seul) l'effaçait (vu le 19 octobre 2026) ; le
+    # et les médias neufs depuis le dernier alignement COMPLET. Un alignement partiel (le site seul) l'effaçait (vu le 19 octobre 2026) ; le
     # téléphone ne recopie pas un fichier de même taille, donc rien ne part deux fois.
     livrables = sorted({f for r in conf.get("exports", {}).values()
                         for f in _dernier(os.path.join(C.RACINE, r["atelier"])).get("sorties", [])} | set(livrables))
-    neufs = medias_neufs(time.time() - 14 * 86400)
+    precedent = json.load(open(trace, encoding="utf-8")) if os.path.isfile(trace) else {}
+    neufs = medias_neufs(precedent.get("horodatage", time.time() - 7 * 86400))
     texte = ["# Alignement du %s%s" % (date, " (ESSAI : rien n'a été touché)" if essai else ""), ""]
     for titre, lignes in rapport:
         texte += ["## " + titre, ""] + ["- **%s** — %s : %s" % l for l in lignes] + [""]
-    texte += ["## Livrables à rapatrier", "", "%d fichier(s) d'export, %d média(s) des 14 derniers jours"
+    texte += ["## Livrables à rapatrier", "", "%d fichier(s) d'export, %d média(s) neuf(s) depuis le dernier alignement complet"
               % (len(livrables), len(neufs)), ""]
     if not essai:
         with open(os.path.join(dossier, date[:10] + ".md"), "w", encoding="utf-8") as f:
@@ -324,7 +326,8 @@ def aligner(etapes=("pousser", "exporter", "publindie", "site"), commiter=(), fo
         json.dump({"date": date, "exports": livrables, "medias": neufs},
                   open(os.path.join(C.RACINE, conf.get("livrables", "ATELIER/alignement/livrables.json")), "w",
                        encoding="utf-8"), ensure_ascii=False, indent=1)
-        json.dump({"date": date, "horodatage": time.time()}, open(trace, "w", encoding="utf-8"))
+        if set(etapes) >= {"pousser", "exporter", "publindie", "site"}:      # seul un alignement COMPLET fait date
+            json.dump({"date": date, "horodatage": time.time()}, open(trace, "w", encoding="utf-8"))
     print("\n".join(texte))
     bloques = sum(1 for _, ls in rapport for l in ls if l[1] in ("BLOQUÉ", "ÉCHEC", "ÉCHEC de construction"))
     return 1 if bloques else 0
