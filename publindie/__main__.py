@@ -9,6 +9,10 @@
     python -m publindie marquer NOM ID RESEAU [URL]  # note qu'une publication est partie
     python -m publindie calendrier [--jours 14]      # ce qui est prévu, jour par jour, tous projets
     python -m publindie reseaux                      # les limites relevées de chaque réseau
+    python -m publindie destinations                 # les formats de chaque vitrine (itch, Steam, le site)
+    python -m publindie vitrine NOM DEST [--seulement PIECE]   # le lot d'une vitrine, vérifié, et sa planche
+    python -m publindie capturer RECETTE.json        # Godot photographie / filme les plans d'une recette
+    python -m publindie aligner [--etapes …] [--commiter NOM…] [--forcer NOM…] [--essai]   # l'alignement (sur le PC)
 
 Les outils de fabrication restent des modules : `python -m publindie.video …`, `.miniature`, `.voix`, `.capture`,
 `.chaine` (les mêmes qu'avant dans `SpannerGames/OUTILS`).
@@ -21,6 +25,7 @@ from publindie import chemins as C
 from publindie import fiches as FI
 from publindie import rangement as RG
 from publindie import reseaux as R
+from publindie import destinations as DS
 
 
 def _projets(nom):
@@ -104,6 +109,52 @@ def cmd_reseaux(a):
     return 0
 
 
+def cmd_destinations(a):
+    print("relevé le %s (à revérifier)" % DS.RELEVE)
+    for k, d in DS.DESTINATIONS.items():
+        print("== %s (%s)" % (d["nom"], k))
+        for role, p in d["pieces"].items():
+            bits = ["/".join(p["sortes"])]
+            for cle, nom in (("taille", "exactement"), ("min", "au moins"), ("max", "au plus")):
+                if p.get(cle):
+                    bits.append("%s %d × %d" % (nom, *p[cle]))
+            if p.get("mo"):
+                bits.append("%g Mo" % p["mo"])
+            if p.get("nombre_min"):
+                bits.append("≥ %d" % p["nombre_min"])
+            print("  %-19s %s%s" % (role, ", ".join(bits), ("  — " + p["conseil"]) if p.get("conseil") else ""))
+    return 0
+
+
+def cmd_vitrine(a):
+    from publindie import vitrine as V
+    rapport, fautes = V.fabriquer(a.nom, a.destination, a.seulement, a.planche_seule)
+    for ligne in rapport:
+        print("%s %-22s %-11s %s" % ("✓" if not ligne["fautes"] else "✗", ligne["nom"], ligne["role"],
+                                     "  ".join("%s (%d×%d, %.2f Mo)" % (f["fichier"].rsplit("/", 1)[-1], f["largeur"],
+                                                                         f["hauteur"], f["mo"])
+                                               for f in ligne["fichiers"])))
+        for n in ligne["notes"]:
+            print("    · %s" % n)
+    for x in fautes:
+        print("  ✗ %s" % x)
+    print("planche : %s" % C.dossier_projet(a.nom, V.charger(a.nom, a.destination)["sortie"], "planche.png"))
+    print("VERDICT : %s" % ("OK — à JUGER sur la planche avant de téléverser" if not fautes else
+                            "%d faute(s)" % len(fautes)))
+    return 1 if fautes else 0
+
+
+def cmd_capturer(a):
+    from publindie import capturer as K
+    return K.capturer(a.recette, a.seulement, a.essai)
+
+
+def cmd_aligner(a):
+    from publindie import alignement as AL
+    etapes = tuple(x.strip() for x in a.etapes.split(","))
+    return AL.aligner(etapes, a.commiter or (), a.forcer or (), a.essai)
+
+
 def main(argv=None):
     # ⚠ LA CONSOLE DE WINDOWS EST EN cp1252 : les coches (✓ ✗ ⚠) y levaient une erreur d'encodage (vu sur le PC).
     for flux in (sys.stdout, sys.stderr):
@@ -124,6 +175,17 @@ def main(argv=None):
     c = sp.add_parser("calendrier"); c.add_argument("--jours", type=int, default=14); c.add_argument("--depuis")
     c.set_defaults(f=cmd_calendrier)
     sp.add_parser("reseaux").set_defaults(f=cmd_reseaux)
+    sp.add_parser("destinations").set_defaults(f=cmd_destinations)
+    c = sp.add_parser("vitrine"); c.add_argument("nom"); c.add_argument("destination")
+    c.add_argument("--seulement"); c.add_argument("--planche-seule", action="store_true",
+                                                  help="ne refait rien : revérifie le lot et redessine la planche")
+    c.set_defaults(f=cmd_vitrine)
+    c = sp.add_parser("capturer"); c.add_argument("recette"); c.add_argument("--seulement")
+    c.add_argument("--essai", action="store_true", help="écrit la commande Godot sans la lancer")
+    c.set_defaults(f=cmd_capturer)
+    c = sp.add_parser("aligner"); c.add_argument("--etapes", default="pousser,exporter,publindie,site")
+    c.add_argument("--commiter", nargs="*"); c.add_argument("--forcer", nargs="*")
+    c.add_argument("--essai", action="store_true"); c.set_defaults(f=cmd_aligner)
     a = ap.parse_args(argv)
     return a.f(a) or 0
 

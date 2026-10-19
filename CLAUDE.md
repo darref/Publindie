@@ -23,6 +23,31 @@ qui contient indie et publi ou post »). Statuts comme ailleurs : DÉCIDÉ · PR
 - **PUBLINDIE NE PUBLIE PAS** : les plateformes n'ont pas d'API ouverte pour tout (itch, les annonces Steam) ou la font
   payer (X), et un humain publie. Il PRÉPARE et il RETIENT.
 
+- **PUBLINDIE FAIT TOUT — DÉCIDÉ (Jordan, 19 octobre 2026 : « gonfler publindie pour qu'il fasse tout »)**, écrit par
+  spannergames-71 :
+  - `destinations.py` : les formats de chaque VITRINE (itch.io : 3 Mo par fichier, GIF compris ; Steam : captures
+    1920 × 1080 en 16:9, au moins 5, les capsules ; le site : WebP 960 / 1920 / 2560, boucles de 6 Mo) — relevés le 19
+    octobre 2026, sources dans le fichier ;
+  - `vitrine PROJET DEST` : d'une liste (`06_boutique/<dest>/vitrine.json`) au lot prêt à téléverser — images (JPEG, ou
+    WebP pour le site), GIF, boucles muettes WebM + MP4 + image d'attente — qui tient TOUT SEUL sous les poids de la
+    vitrine (qualité, images par seconde, largeur, CRF, puis débit plafonné), et DIT ce qu'il a cédé ; vérifié ; la
+    planche (`lot/planche.png`) à regarder avant de téléverser ;
+  - `capturer RECETTE.json` : Godot photographie et filme une SCÈNE (un jeu, un monde posé par le greffon) dans un
+    SubViewport à la taille EXACTE, films à pas fixe (`--fixed-fps`), HUD caché (`cacher_interface`) ;
+  - `aligner` : l'ALIGNEMENT de `SpannerGames/CLAUDE.md` §0 (pousser, exporter ce dont le commit a bougé —
+    `ATELIER/<P>/builds/DERNIER_EXPORT.txt` —, Publindie, le site et son aperçu), sur le PC ; `SpannerGames/OUTILS/
+    rapatrier.sh` fait l'étape du téléphone.
+
+## MESURÉ (19 octobre 2026)
+
+- 22 tests sur le PC (`python -m unittest discover -s tests`, 343 s) ; la limite de poids des vitrines cassée exprès
+  (`if False`) les fait rougir. Sur le téléphone, ffmpeg y est 3 à 4 fois plus lent (875 s) : les tests se lancent au PC.
+- `capturer` sur WaterDrop (`SpannerGames/PROJETS/MarchingBlocks/01_scripts/recettes/waterdrop_godot.json`) : 4 images
+  1920 × 1080 et un survol de 6 s à 30 images/s, du premier coup ; le HUD et les éléments de test du jeu cachés au
+  second essai. Rendu par SSH : Godot trouve la RTX 2060 (Vulkan) même lancé hors du bureau.
+- ⚠ Une mire au bruit total (`noise=allf=t`) est pire que n'importe quelle vraie image : un GIF de bruit ne tient pas
+  3 Mo même réduit. `vitrine` le dit (« même réduit, le GIF dépasse ») au lieu de livrer — le comportement voulu.
+
 ## MESURÉ (18 octobre 2026)
 
 - `python -m unittest discover -s tests` : 10 tests, sur un studio jetable ; cinq mutations rouges (le lien de X compté
@@ -33,6 +58,7 @@ qui contient indie et publi ou post »). Statuts comme ailleurs : DÉCIDÉ · PR
 
 - Verser ici `short_texte.py` (les Shorts à texte incrusté, aujourd'hui dans `PROJETS/MarchingBlocks/07_publication/
   outils/`) et ses recettes par projet.
+- `capturer` ne filme pas l'APPLI MarchingBlocks (ses gestes passent par ses vrais outils : `DEV_TOOLS/filmer_*.gd`).
 - Ranger les 121 exports de MarchingBlocks (13,7 Go) : `ranger` les liste, rien n'est déplacé (des scripts citent leurs
   chemins).
 - Une interface (page web locale) par-dessus la ligne de commande, si l'usage le demande.

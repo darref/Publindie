@@ -126,3 +126,160 @@ class Fiches(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _ffmpeg_present():
+    import shutil
+    return bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
+
+
+class Destinations(unittest.TestCase):
+    def test_itch_refuse_plus_de_3_mo(self):
+        from publindie import destinations as D
+        self.assertEqual(D.verifier_piece("itch", "capture", "image", 1920, 1080, 2.9), [])
+        self.assertEqual(len(D.verifier_piece("itch", "capture", "gif", 960, 540, 3.2)), 1)
+
+    def test_steam_tailles(self):
+        from publindie import destinations as D
+        self.assertEqual(D.verifier_piece("steam", "capsule_entete", "image", 920, 430), [])
+        self.assertEqual(len(D.verifier_piece("steam", "capsule_entete", "image", 921, 430)), 1)
+        self.assertEqual(len(D.verifier_piece("steam", "capture", "image", 1600, 900)), 1)   # trop petite
+        self.assertEqual(len(D.verifier_piece("steam", "capture", "gif", 1920, 1080)), 1)    # pas de GIF
+        self.assertEqual(len(D.verifier_piece("steam", "capture", "image", 1920, 1200)), 1)  # pas en 16:9
+
+    def test_nombres(self):
+        from publindie import destinations as D
+        self.assertEqual(len(D.verifier_nombres("steam", {"capture": 4, "capsule_entete": 1, "capsule_petite": 1,
+                                                          "capsule_principale": 1, "capsule_verticale": 1,
+                                                          "bibliotheque": 1})), 1)
+        self.assertEqual(len(D.verifier_nombres("itch", {"couverture": 2, "capture": 3})), 1)
+
+
+@unittest.skipUnless(_ffmpeg_present(), "ffmpeg absent")
+class Vitrine(unittest.TestCase):
+    def setUp(self):
+        import subprocess
+        self.studio = _studio()
+        _recharger(self.studio)
+        from publindie import vitrine
+        importlib.reload(vitrine)
+        self.V = vitrine
+        p = os.path.join(self.studio, "PROJETS", "Jeu")
+        # 6 s de mire animée, 1920 × 1080, un peu bruitée (assez pour qu'un GIF de 960 px dépasse 3 Mo et soit réduit)
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                        "testsrc2=size=1920x1080:rate=30:duration=6,noise=alls=14:allf=t",
+                        "-pix_fmt", "yuv420p", os.path.join(p, "04_exports", "mire.mp4")], check=True)
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i",
+                        "testsrc2=size=1920x1080:rate=30:duration=4", "-pix_fmt", "yuv420p",
+                        os.path.join(p, "04_exports", "propre.mp4")], check=True)
+        from PIL import Image
+        Image.new("RGB", (2560, 1440), (40, 120, 200)).save(os.path.join(p, "04_exports", "grande.png"))
+        os.makedirs(os.path.join(p, "06_boutique", "itch"))
+        os.makedirs(os.path.join(p, "06_boutique", "site"))
+        self.p = p
+
+    def _liste(self, dest, pieces):
+        with open(os.path.join(self.p, "06_boutique", dest, "vitrine.json"), "w", encoding="utf-8") as f:
+            json.dump({"pieces": pieces}, f)
+
+    def test_itch_un_lot_complet(self):
+        self._liste("itch", [
+            {"role": "couverture", "nom": "cover", "source": "04_exports/propre.mp4", "sorte": "gif", "debut": 0,
+             "duree": 6, "largeur": 630, "hauteur": 500, "fps": 15},
+            {"role": "capture", "nom": "01", "source": "04_exports/grande.png", "largeur": 1920},
+            {"role": "capture", "nom": "02", "source": "04_exports/mire.mp4", "temps": 2, "recadrage": [0, 0, 960, 540]},
+            {"role": "capture", "nom": "03", "source": "04_exports/propre.mp4", "sorte": "gif", "duree": 4,
+             "largeur": 960, "fps": 15},
+        ])
+        rapport, fautes = self.V.fabriquer("Jeu", "itch")
+        self.assertEqual(fautes, [], rapport)
+        par_nom = {l["nom"]: l for l in rapport}
+        self.assertEqual((par_nom["cover"]["fichiers"][0]["largeur"], par_nom["cover"]["fichiers"][0]["hauteur"]),
+                         (630, 500))
+        self.assertEqual(par_nom["01"]["fichiers"][0]["largeur"], 1920)
+        self.assertEqual(par_nom["02"]["fichiers"][0]["largeur"], 960)                 # recadré, pas agrandi
+        for l in rapport:
+            for f in l["fichiers"]:
+                self.assertLessEqual(f["mo"], 3.0)
+        self.assertTrue(os.path.exists(os.path.join(self.p, "06_boutique", "itch", "lot", "planche.png")))
+
+    def test_une_piece_manquante_et_trop_peu_de_captures(self):
+        self._liste("itch", [{"role": "capture", "nom": "x", "source": "04_exports/absent.png"}])
+        rapport, fautes = self.V.fabriquer("Jeu", "itch")
+        self.assertTrue(any("source absente" in f for f in fautes))
+        self.assertTrue(any("au moins 3" in f for f in fautes))
+        self.assertTrue(any("couverture" in f for f in fautes))
+
+    def test_site_boucle_et_webp(self):
+        self._liste("site", [
+            {"role": "boucle", "nom": "tour", "source": "04_exports/propre.mp4", "duree": 3, "largeur": 1280},
+            {"role": "image", "nom": "ile", "source": "04_exports/grande.png"},
+        ])
+        rapport, fautes = self.V.fabriquer("Jeu", "site")
+        self.assertEqual(fautes, [], rapport)
+        par_nom = {l["nom"]: l for l in rapport}
+        exts = sorted(f["fichier"].rsplit(".", 1)[1] for f in par_nom["tour"]["fichiers"])
+        self.assertEqual(exts, ["mp4", "webm"])
+        self.assertTrue(os.path.exists(os.path.join(self.p, "06_boutique", "site", "lot", "tour.webp")))  # l'attente
+        self.assertEqual(sorted(f["largeur"] for f in par_nom["ile"]["fichiers"]), [960, 1920, 2560])
+
+
+class Capturer(unittest.TestCase):
+    def test_recette_et_commande(self):
+        studio = _studio()
+        _recharger(studio)
+        from publindie import capturer as K
+        importlib.reload(K)
+        r = os.path.join(studio, "r.json")
+        with open(r, "w", encoding="utf-8") as f:
+            json.dump({"projet": "Jeu", "scene": "res://a.tscn", "taille": [1280, 720], "plans": [
+                {"nom": "a", "oeil": [0, 1, 2], "cible": [0, 0, 0]},
+                {"nom": "b", "oeil": [0, 1, 2], "cible": [0, 0, 0], "film": {"secondes": 2}}]}, f)
+        rec = K.charger(r)
+        cmd = K.commande(rec, "/sortie", "/r.json", "b")
+        self.assertIn("--fixed-fps", cmd)                       # un film : pas de temps fixe
+        self.assertIn("1280x720", cmd)
+        self.assertEqual(cmd[-1], "--seulement=b")
+        with open(r, "w", encoding="utf-8") as f:
+            json.dump({"projet": "Jeu", "scene": "s", "plans": [{"nom": "a", "oeil": [0, 1], "cible": [0, 0, 0]}]}, f)
+        with self.assertRaises(SystemExit):
+            K.charger(r)
+
+
+@unittest.skipUnless(_ffmpeg_present(), "ffmpeg absent")
+class VitrineRefus(Vitrine):
+    """Ce qui ne tient pas est DIT, jamais livré en silence."""
+    def test_itch_un_lot_complet(self):
+        pass
+
+    def test_site_boucle_et_webp(self):
+        pass
+
+    def test_une_piece_manquante_et_trop_peu_de_captures(self):
+        pass
+
+    def test_un_gif_trop_lourd_cede_et_le_dit(self):
+        from publindie import destinations as D
+        self._liste("itch", [{"role": "capture", "nom": "g", "source": "04_exports/propre.mp4", "sorte": "gif",
+                              "duree": 4, "largeur": 960, "fps": 15}])
+        ancien = D.DESTINATIONS["itch"]["pieces"]["capture"]["mo"]
+        D.DESTINATIONS["itch"]["pieces"]["capture"]["mo"] = 0.8
+        try:
+            rapport, fautes = self.V.fabriquer("Jeu", "itch")
+        finally:
+            D.DESTINATIONS["itch"]["pieces"]["capture"]["mo"] = ancien
+        self.assertTrue(any("GIF cédé" in n for n in rapport[0]["notes"]), rapport[0])
+        f = rapport[0]["fichiers"][0]
+        self.assertTrue(f["mo"] <= 0.8 or any("dépasse" in n for n in rapport[0]["notes"]), rapport[0])
+
+    def test_une_boucle_trop_lourde_est_refusee(self):
+        from publindie import destinations as D
+        self._liste("site", [{"role": "boucle", "nom": "lourde", "source": "04_exports/mire.mp4", "duree": 4}])
+        ancien = D.DESTINATIONS["site"]["pieces"]["boucle"]["mo"]
+        D.DESTINATIONS["site"]["pieces"]["boucle"]["mo"] = 0.004         # 4 ko : impossible, même plafonnée
+        try:
+            rapport, fautes = self.V.fabriquer("Jeu", "site")
+        finally:
+            D.DESTINATIONS["site"]["pieces"]["boucle"]["mo"] = ancien
+        self.assertTrue(any("Mo, 0.004 au plus" in f for f in fautes), fautes)
+        self.assertTrue(any("plafonnée" in n for n in rapport[0]["notes"]))
