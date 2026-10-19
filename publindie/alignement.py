@@ -166,8 +166,8 @@ def exporter(depots, exports, forcer=(), essai=False, date=None, seulement=()):
             continue
         ouvert = editeur_ouvert(depot)
         if ouvert:
-            lignes.append((nom, "BLOQUÉ", "un Godot a ce projet ouvert (pid %s) : l'export réimporte le projet, le fermer "
-                                          "d'abord" % ouvert))
+            lignes.append((nom, "sauté", "un Godot a ce projet ouvert (pid %s) : l'export réimporte le projet ; il partira "
+                                         "au prochain alignement" % ouvert))
             continue
         if essai:
             lignes.append((nom, "à exporter", "commit %s (dernier : %s)" % (commit, avant.get("commit", "jamais"))))
