@@ -227,6 +227,8 @@ def itch(regles, exports, essai=False, date=None):
     lignes = []
     butler = C.OUTILS.get("butler", BUTLER)
     for nom, r in regles.items():
+        if nom.startswith("_"):
+            continue                                            # une note, pas un projet
         atelier = os.path.join(C.RACINE, exports[nom]["atelier"])
         exp = _dernier(atelier)
         f_itch = os.path.join(atelier, "DERNIER_ITCH.txt")
