@@ -23,6 +23,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 
 from publindie import chemins as C
@@ -274,10 +275,12 @@ def site(regle, essai=False):
     # la déconnexion). L'ancien serveur, s'il écoute encore, est arrêté d'abord.
     ps = ("Get-NetTCPConnection -LocalPort %d -State Listen -ErrorAction SilentlyContinue | ForEach-Object "
           "{ Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; "
-          "Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='python -m http.server "
-          "%d -d public'; CurrentDirectory='%s'} | Out-Null" % (port, port, depot.replace("/", "\\")))
+          "Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='\"%s\" -m http.server "
+          "%d -d public'; CurrentDirectory='%s'} | Out-Null" % (port, sys.executable, port, depot.replace("/", "\\")))
+    # ⚠ un processus créé par WMI n'a pas le PATH de l'utilisateur : `python` seul n'y est pas trouvé (vu le 19 octobre
+    # 2026, l'aperçu ne répondait pas) — d'où le chemin complet de l'interpréteur.
     subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True)
-    time.sleep(2)
+    time.sleep(4)
     ok = subprocess.run(["powershell", "-NoProfile", "-Command",
                          "(Invoke-WebRequest -UseBasicParsing http://localhost:%d/).StatusCode" % port],
                         capture_output=True, text=True).stdout.strip() == "200"
