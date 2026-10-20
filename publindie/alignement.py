@@ -331,11 +331,14 @@ def site(regle, essai=False):
         (p.stdout + p.stderr).strip().splitlines()[-1:] or ["?"])[0]
     subprocess.run(["python", "outils/construire.py"], cwd=depot, capture_output=True)   # --production a pu écrire public/
     # L'aperçu doit survivre à la session SSH : un processus créé par WMI échappe au « job » d'OpenSSH (qui tue tout à
-    # la déconnexion). L'ancien serveur, s'il écoute encore, est arrêté d'abord.
-    ps = ("Get-NetTCPConnection -LocalPort %d -State Listen -ErrorAction SilentlyContinue | ForEach-Object "
-          "{ Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; "
+    # la déconnexion). Les anciens serveurs sont arrêtés d'abord : ⚠ TOUS ceux de ce port, reconnus à leur ligne de
+    # commande, pas seulement celui qui écoute — sous Windows, http.server ouvre son port avec SO_REUSEADDR, un second
+    # s'y ouvre à côté du premier sans erreur (deux aperçus sur 8790 le 19 octobre 2026, à chaque alignement un de plus).
+    anciens = ("Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -match "
+               "'http\\.server +%d\\b' }" % port)
+    ps = ("%s | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }; "
           "Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='\"%s\" -m http.server "
-          "%d -d public'; CurrentDirectory='%s'} | Out-Null" % (port, sys.executable, port, depot.replace("/", "\\")))
+          "%d -d public'; CurrentDirectory='%s'} | Out-Null" % (anciens, sys.executable, port, depot.replace("/", "\\")))
     # ⚠ un processus créé par WMI n'a pas le PATH de l'utilisateur : `python` seul n'y est pas trouvé (vu le 19 octobre
     # 2026, l'aperçu ne répondait pas) — d'où le chemin complet de l'interpréteur.
     subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True)
@@ -343,9 +346,13 @@ def site(regle, essai=False):
     ok = subprocess.run(["powershell", "-NoProfile", "-Command",
                          "(Invoke-WebRequest -UseBasicParsing http://localhost:%d/).StatusCode" % port],
                         capture_output=True, text=True).stdout.strip() == "200"
-    return [("site", "construit", fin[0]), ("site", "production", bloque),
-            ("site", "aperçu", ("en ligne sur le port %d (téléphone : ssh -L %d:localhost:%d pcjordan)" % (port, port, port))
-             if ok else "⚠ l'aperçu ne répond pas sur le port %d" % port)]
+    n = subprocess.run(["powershell", "-NoProfile", "-Command", "@(%s).Count" % anciens],
+                       capture_output=True, text=True).stdout.strip()
+    apercu = ("en ligne sur le port %d (téléphone : ssh -L %d:localhost:%d pcjordan)" % (port, port, port)
+              if ok else "⚠ l'aperçu ne répond pas sur le port %d" % port)
+    if n != "1":
+        apercu += " — ⚠ %s serveur(s) sur ce port au lieu d'un seul" % (n or "?")
+    return [("site", "construit", fin[0]), ("site", "production", bloque), ("site", "aperçu", apercu)]
 
 
 # ── tout ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
