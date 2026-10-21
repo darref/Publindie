@@ -8,3 +8,12 @@ __pycache__/
 *.wav
 *.mp3
 *.zip
+# LES SECRETS NE SONT JAMAIS DANS UN DÉPÔT (Jordan, 21 octobre 2026) : ils vivent dans ~/.publindie (chemins.SECRETS).
+# Ces motifs rattrapent un secret déposé ici par erreur.
+.publindie/
+secrets/
+client_secret*.json
+jeton*.json
+token*.json
+bluesky_compte*.json
+bluesky.json

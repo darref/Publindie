@@ -62,6 +62,11 @@ VIOLET = tuple(_conf.get("teintes", {}).get("violet", (42, 26, 70)))
 OR = tuple(_conf.get("teintes", {}).get("or", (202, 160, 68)))
 
 
+# LES SECRETS (mots de passe d'application, identifiants OAuth, jetons) : JAMAIS dans un dépôt. Un dossier hors git :
+# la variable `PUBLINDIE_SECRETS`, sinon la clé « secrets » du publindie.json, sinon `~/.publindie`.
+SECRETS = os.path.expanduser(os.environ.get("PUBLINDIE_SECRETS", "") or _conf.get("secrets", "") or "~/.publindie")
+
+
 def dossier_projet(nom, *parties):
     """Le dossier média d'un projet : <studio>/PROJETS/<nom>/<parties…>."""
     if nom not in PROJETS:
@@ -76,6 +81,7 @@ def main():
         ok = chemin and os.path.exists(chemin)
         manque += 0 if ok else 1
         print("%-13s %s  %s" % (nom, "ok  " if ok else "MANQUE", chemin))
+    print("%-13s %s  %s" % ("secrets", "ok  " if os.path.isdir(SECRETS) else "absent", SECRETS))
     for nom, chemin in PROJETS.items():
         ok = os.path.isdir(chemin)
         manque += 0 if ok else 1

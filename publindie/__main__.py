@@ -6,7 +6,10 @@
     python -m publindie ranger [NOM]                 # ce qui est où, ce qui traîne, les exports sans fiche
     python -m publindie verifier [NOM]               # chaque fiche contre les limites de chaque réseau (rend 1 sinon)
     python -m publindie preparer NOM [ID]            # 07_publication/a_poster/<id>.md : quoi joindre, quoi coller
-    python -m publindie marquer NOM ID RESEAU [URL]  # note qu'une publication est partie
+    python -m publindie marquer NOM ID RESEAU [URL]  # note qu'une publication est partie (réseaux postés à la main)
+    python -m publindie poster NOM ID [--reseau bluesky|youtube|youtube_short] [--pour-de-vrai]
+                                                     # Publindie poste LUI-MÊME ; sans --pour-de-vrai : un ESSAI
+    python -m publindie connecter bluesky|youtube [NOM]   # brancher un compte (Jordan, une fois) ; ne poste rien
     python -m publindie calendrier [--jours 14]      # ce qui est prévu, jour par jour, tous projets
     python -m publindie reseaux                      # les limites relevées de chaque réseau
     python -m publindie destinations                 # les formats de chaque vitrine (itch, Steam, le site)
@@ -82,6 +85,46 @@ def cmd_preparer(a):
 def cmd_marquer(a):
     FI.marquer(a.nom, a.id, a.reseau, a.url or "")
     print("noté : %s/%s sur %s" % (a.nom, a.id, R.RESEAUX[a.reseau]["nom"]))
+    return 0
+
+
+def cmd_poster(a):
+    from publindie import poster as P
+    if a.essai and a.pour_de_vrai:
+        print("✗ --essai et --pour-de-vrai ensemble : rien ne part")
+        return P.REFUS
+    return P.poster(a.nom, a.id, a.reseau, pour_de_vrai=a.pour_de_vrai)
+
+
+def cmd_connecter(a):
+    """Ouvre la session (Bluesky) ou fait consentir Jordan dans son navigateur (YouTube), et dit le compte trouvé.
+    Ne poste rien. C'est Jordan qui lance cette commande : Publindie ne se connecte jamais à sa place."""
+    if a.reseau == "bluesky":
+        from publindie import bluesky as B
+        try:
+            client = B.Client(B.charger_secret(C.SECRETS, a.nom or "studio"))
+        except B.SecretManquant as e:
+            print(e)
+            return 2
+        s = client.ouvrir()
+        print("✓ Bluesky : %s (%s), PDS %s, e-mail %s" % (s.get("handle"), s.get("did"), client.pds,
+                                                          "vérifié" if s.get("emailConfirmed") else "NON VÉRIFIÉ "
+                                                          "(Bluesky refusera les vidéos)"))
+        try:
+            print("  vidéos : %s" % client.limites_video())
+        except B.ErreurBluesky as e:
+            print("  ⚠ limites vidéo illisibles : %s" % e)
+        return 0
+    from publindie import youtube as Y
+    try:
+        yt = Y.service(C.SECRETS, consentir=True)
+    except Y.SecretManquant as e:
+        print(e)
+        return 2
+    r = yt.channels().list(part="snippet", mine=True).execute()
+    for ch in r.get("items", []):
+        print("✓ YouTube : chaîne « %s » (%s)" % (ch["snippet"]["title"], ch["id"]))
+    print("  jeton : %s" % Y.chemins_secrets(C.SECRETS)[1].replace("\\", "/"))
     return 0
 
 
@@ -172,6 +215,15 @@ def main(argv=None):
     c = sp.add_parser("preparer"); c.add_argument("nom"); c.add_argument("id", nargs="?"); c.set_defaults(f=cmd_preparer)
     c = sp.add_parser("marquer"); c.add_argument("nom"); c.add_argument("id"); c.add_argument("reseau")
     c.add_argument("url", nargs="?"); c.set_defaults(f=cmd_marquer)
+    c = sp.add_parser("poster", help="poster une fiche sur Bluesky / YouTube (essai par défaut)")
+    c.add_argument("nom"); c.add_argument("id")
+    c.add_argument("--reseau", choices=["bluesky", "youtube", "youtube_short"])
+    c.add_argument("--essai", action="store_true", help="montrer ce qui partirait (le défaut)")
+    c.add_argument("--pour-de-vrai", action="store_true", help="POSTER pour de vrai (sinon : un essai)")
+    c.set_defaults(f=cmd_poster)
+    c = sp.add_parser("connecter", help="brancher un compte (Bluesky : mot de passe d'application ; YouTube : OAuth)")
+    c.add_argument("reseau", choices=["bluesky", "youtube"]); c.add_argument("nom", nargs="?")
+    c.set_defaults(f=cmd_connecter)
     c = sp.add_parser("calendrier"); c.add_argument("--jours", type=int, default=14); c.add_argument("--depuis")
     c.set_defaults(f=cmd_calendrier)
     sp.add_parser("reseaux").set_defaults(f=cmd_reseaux)

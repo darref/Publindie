@@ -13,7 +13,9 @@ python -m publindie projet NOM                   # l'arbre d'un projet (01_scrip
 python -m publindie ranger [NOM]                 # ce qui est où, ce qui traîne, les exports sans fiche
 python -m publindie verifier [NOM]               # chaque fiche contre les limites de chaque réseau
 python -m publindie preparer NOM [ID]            # la feuille de route : quoi joindre, quoi coller, où
-python -m publindie marquer NOM ID RESEAU [URL]  # « c'est parti »
+python -m publindie marquer NOM ID RESEAU [URL]  # « c'est parti » (les réseaux postés à la main)
+python -m publindie poster NOM ID [--reseau bluesky|youtube|youtube_short] [--pour-de-vrai]   # essai par défaut
+python -m publindie connecter bluesky|youtube    # brancher un compte, une fois (secrets dans ~/.publindie)
 python -m publindie calendrier [--jours 14]      # ce qui est prévu, jour par jour, tous projets
 python -m publindie reseaux                      # les limites relevées
 python -m publindie.video couper|monter|musique|short|planche|gif|verifier …
