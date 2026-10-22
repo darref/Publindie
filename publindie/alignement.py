@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """L'ALIGNEMENT — la règle de `SpannerGames/CLAUDE.md` §0 (Jordan, 19 octobre 2026), en une commande, SUR LE PC.
 
-    python -m publindie aligner                       # tout : pousser, exporter ce qui a changé, itch.io, Publindie, le site
+    python -m publindie aligner                       # tout : mettre d'accord, pousser, exporter, itch.io, Publindie, le site
     python -m publindie aligner --etapes pousser,site # seulement ces étapes
     python -m publindie aligner --commiter Pix WaterDrop   # commite aussi le travail en cours de ces dépôts
     python -m publindie aligner --forcer SoluTiles    # réexporte même si le commit n'a pas bougé
@@ -19,6 +19,7 @@ ce qui est commité, TIRE ce qui est en avance sur GitHub (avance rapide seuleme
 """
 import datetime
 import glob
+import hashlib
 import json
 import os
 import re
@@ -42,6 +43,125 @@ def git(depot, *args, verifier=False):
     if verifier and r.returncode != 0:
         raise RuntimeError("git %s : %s" % (" ".join(args), (r.stderr or r.stdout).strip()[-400:]))
     return r.stdout.strip()
+
+
+# ── 0. mettre d'accord ───────────────────────────────────────────────────────────────────────────────────────────────
+# Jordan, 22 octobre 2026 : « l'alignement devrait mettre d'accord tous les travaux faits, avant tout ». Le 21 octobre, les
+# 544 décors de The Ruin ont été exportés dans la copie de travail d'une session (`ATELIER/Satyron/worktrees/…`) et jamais
+# dans le jeu : le projet du PC ne les voyait pas. Avant de pousser, on relève donc TOUT travail qui n'est pas dans la
+# branche du dépôt : les copies de travail git (worktrees) et ce qu'elles ont de non commité ou de commits absents de la
+# branche ; les branches locales non fusionnées ; les exports GÉNÉRÉS plus vieux que leur source. Ce n'est qu'un RELEVÉ :
+# fusionner, recopier ou jeter se décide (la session qui aligne compare, et ce qu'elle ne peut trancher va à Jordan).
+
+def _copies(depot):
+    """Les copies de travail git du dépôt (sans le dépôt lui-même) : [(chemin, tête, branche ou None)]."""
+    copies, c = [], {}
+    for l in git(depot, "worktree", "list", "--porcelain").splitlines() + [""]:
+        if not l.strip():
+            if c.get("worktree") and os.path.normcase(os.path.abspath(c["worktree"])) != os.path.normcase(os.path.abspath(depot)):
+                copies.append((c["worktree"], c.get("HEAD", ""), c.get("branch", "").replace("refs/heads/", "") or None))
+            c = {}
+            continue
+        k, _, v = l.partition(" ")
+        c[k] = v or True
+    return copies
+
+
+## Ce qui se refait seul et ne compte pas comme travail : les fichiers que Godot régénère, et le `project.godot` des copies
+## (chaque tournage y retouche la fenêtre).
+_REGENERE = re.compile(r"\.(uid|import)$|(^|/)\.godot/|^project\.godot$")
+_STATUT = re.compile(r"^\s*\S{1,2}\s+")  # « ␠M chemin » : `git()` ôte l'espace de tête de la première ligne
+
+
+def _iles_perimees(depot):
+    """Les îles dont l'export du jeu (`GAME/islands/<i>/<i>.tscn`) est absent ou plus vieux que sa source (`ILES/<i>/<i>.mbproj`)."""
+    perimees = []
+    for src in glob.glob(os.path.join(depot, "ILES", "*", "*.mbproj")):
+        ile = os.path.splitext(os.path.basename(src))[0]
+        scene = os.path.join(depot, "GAME", "islands", ile, ile + ".tscn")
+        if not os.path.isfile(scene):
+            perimees.append("%s (jamais exportée dans le jeu)" % ile)
+        elif os.path.getmtime(scene) + 60 < os.path.getmtime(src):
+            perimees.append("%s (export du %s, source du %s)" % (ile, _date(scene), _date(src)))
+    return perimees
+
+
+def _date(f):
+    return datetime.datetime.fromtimestamp(os.path.getmtime(f)).strftime("%d/%m %H:%M")
+
+
+def _empreinte(f):
+    """Le contenu, aux fins de ligne près (une copie Windows et une copie Git n'écrivent pas pareil)."""
+    try:
+        with open(f, "rb") as h:
+            return hashlib.md5(h.read().replace(b"\r\n", b"\n")).hexdigest()
+    except OSError:
+        return None
+
+
+def _rangees():
+    """Les empreintes des scripts de tournage et de médias rangés dans le studio (`PROJETS/*/01_scripts`) : une copie de
+    travail qui n'a QUE ça de plus n'a rien perdu."""
+    vus = {}
+    for f in glob.glob(os.path.join(C.RACINE, "PROJETS", "*", "01_scripts", "**", "*"), recursive=True):
+        if os.path.isfile(f):
+            vus.setdefault(os.path.basename(f), set()).add(_empreinte(f))
+    return vus
+
+
+def _ailleurs(fichier, copie, depot, rangees):
+    """Vrai si ce fichier de la copie existe IDENTIQUE dans le dépôt (même chemin) ou rangé dans le studio."""
+    e = _empreinte(os.path.join(copie, fichier))
+    if e is None:  # supprimé dans la copie : le dépôt l'a toujours
+        return True
+    if e == _empreinte(os.path.join(depot, fichier)) or e in rangees.get(os.path.basename(fichier), ()):
+        return True
+    # Une ANCIENNE version déjà passée par l'historique du dépôt (la copie est restée en arrière) : rien de perdu.
+    blob = git(depot, "hash-object", "--path=" + fichier, os.path.join(copie, fichier))
+    return bool(blob) and bool(git(depot, "log", "--all", "-1", "--format=%h", "--find-object=" + blob))
+
+
+def accorder(depots):
+    lignes = []
+    rangees = _rangees()
+    for nom, depot in depots.items():
+        if not os.path.isdir(os.path.join(depot, ".git")):
+            continue
+        branche = git(depot, "branch", "--show-current") or "HEAD"
+        vus = []
+        for chemin, tete, sa_branche in _copies(depot):
+            if not os.path.isdir(chemin):
+                vus.append(("copie " + chemin, "disparue (`git worktree prune`)"))
+                continue
+            sale = [f for f in (_STATUT.sub("", l).strip('"').replace("\\", "/")
+                                for l in git(chemin, "status", "--porcelain").splitlines() if l.strip())
+                    if not _REGENERE.search(f) and not _ailleurs(f, chemin, depot, rangees)]
+            # En retard : le dépôt a ce fichier, PLUS RÉCENT que la copie (elle est restée derrière, rien de perdu) ; le reste
+            # (plus récent dans la copie, ou absent du dépôt) est du travail qui n'est QUE là.
+            retard = [f for f in sale if os.path.isfile(os.path.join(depot, f))
+                      and os.path.getmtime(os.path.join(depot, f)) > os.path.getmtime(os.path.join(chemin, f))]
+            sale = [f for f in sale if f not in retard]
+            hors = int(git(depot, "rev-list", "--count", tete, "^" + branche) or 0) if tete else 0
+            if retard and not (sale or hors):
+                vus.append(("copie " + chemin, "en retard sur le dépôt (%d fichier(s) plus anciens) : rien de perdu"
+                            % len(retard)))
+            if sale or hors:
+                quoi = []
+                if hors:
+                    quoi.append("%d commit(s) absent(s) de %s" % (hors, branche))
+                if sale:
+                    quoi.append("%d fichier(s) non commité(s) : %s%s" % (len(sale), ", ".join(sale[:4]),
+                                                                          " …" if len(sale) > 4 else ""))
+                vus.append(("copie " + chemin + (" [%s]" % sa_branche if sa_branche else ""), "⚠ " + ", ".join(quoi)))
+        for b in git(depot, "branch", "--format=%(refname:short)", "--no-merged", branche).splitlines():
+            b = b.strip()
+            if b:
+                vus.append(("branche " + b, "⚠ %s commit(s) absent(s) de %s"
+                            % (git(depot, "rev-list", "--count", b, "^" + branche), branche)))
+        for ile in _iles_perimees(depot):
+            vus.append(("île " + ile.split(" ")[0], "⚠ à réexporter : " + ile.split(" ", 1)[1].strip("()")))
+        lignes += [(nom, ou, quoi) for ou, quoi in vus]
+    return lignes or [("tout", "d'accord", "aucune copie, branche ni export en retard")]
 
 
 # ── 1. pousser ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -357,13 +477,16 @@ def site(regle, essai=False):
 
 # ── tout ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-def aligner(etapes=("pousser", "exporter", "itch", "publindie", "site"), commiter=(), forcer=(), essai=False, seulement=()):
+def aligner(etapes=("accorder", "pousser", "exporter", "itch", "publindie", "site"), commiter=(), forcer=(), essai=False,
+            seulement=()):
     conf = _conf()
     date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     dossier = os.path.join(C.RACINE, "ATELIER", "alignement")
     os.makedirs(dossier, exist_ok=True)
     trace = os.path.join(dossier, "dernier.json")
     rapport, livrables = [], []
+    if "accorder" in etapes:
+        rapport.append(("0. Mettre d'accord (avant tout)", accorder(conf["depots"])))
     if "pousser" in etapes:
         rapport.append(("1. Pousser", pousser(conf["depots"], commiter, essai, date[:10])))
     if "exporter" in etapes:

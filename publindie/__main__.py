@@ -235,7 +235,7 @@ def main(argv=None):
     c = sp.add_parser("capturer"); c.add_argument("recette"); c.add_argument("--seulement")
     c.add_argument("--essai", action="store_true", help="écrit la commande Godot sans la lancer")
     c.set_defaults(f=cmd_capturer)
-    c = sp.add_parser("aligner"); c.add_argument("--etapes", default="pousser,exporter,itch,publindie,site")
+    c = sp.add_parser("aligner"); c.add_argument("--etapes", default="accorder,pousser,exporter,itch,publindie,site")
     c.add_argument("--commiter", nargs="*"); c.add_argument("--forcer", nargs="*")
     c.add_argument("--seulement", nargs="*", help="n'exporter que ces projets")
     c.add_argument("--essai", action="store_true"); c.set_defaults(f=cmd_aligner)
