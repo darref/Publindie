@@ -28,7 +28,7 @@ import soundfile as sf
 LEXIQUE = {
     "MarchingBlocks": "Marching Blocks",
     "SpannerGames": "Spanner Games",
-    "SoluTiles": "[SoluTiles](/sˈoʊljuːtaɪlz/)",
+    "MarchingSquares": "Marching Squares",
     "Godot": "[Godot](/ɡˈoʊdoʊ/)",
 }
 TAUX = 24000

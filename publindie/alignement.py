@@ -4,9 +4,9 @@
     python -m publindie aligner                       # tout : mettre d'accord, pousser, exporter, itch.io, Publindie, le site
     python -m publindie aligner --etapes pousser,site # seulement ces étapes
     python -m publindie aligner --commiter Pix WaterDrop   # commite aussi le travail en cours de ces dépôts
-    python -m publindie aligner --forcer SoluTiles    # réexporte même si le commit n'a pas bougé
+    python -m publindie aligner --forcer MarchingSquares    # réexporte même si le commit n'a pas bougé
     python -m publindie aligner --essai               # dit ce qu'il ferait, ne touche à rien
-    python -m publindie aligner --etapes exporter --seulement SoluTiles   # un seul projet
+    python -m publindie aligner --etapes exporter --seulement MarchingSquares   # un seul projet
 
 Ce que dit `publindie.json` (clé `alignement`) : les dépôts, les exports de chaque projet (presets Godot ou commande du
 projet), le site. Le rapport s'écrit dans `<studio>/ATELIER/alignement/<date>.md`, et la liste des LIVRABLES à rapatrier
