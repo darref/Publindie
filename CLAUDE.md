@@ -98,6 +98,17 @@ YouTube — `visibilite` (public par défaut, unlisted, private), `publier_a` (d
 8. L'**audit** (« YouTube API Services - Audit and Quota Extension Form ») : seulement si la première vidéo ressort
    privée (voir plus bas) ou si 100 envois par jour ne suffisent plus.
 
+**MESURÉ (4 novembre 2026) : YOUTUBE EST BRANCHÉ** — le projet Google Cloud « Publindie » (Jordan), son client
+Desktop dans `.publindie/youtube/client_secret.json`, le jeton `jeton.json` écrit par `connecter youtube` : chaîne
+« SpannerGames » (`UCdz4JUs1BM8OYQr77aHOILQ`). ⚠ Deux pièges payés : (1) « la procédure de validation n'a pas été
+terminée » = l'appli est en *Testing* et le compte n'est pas testeur → **Publish app** (ou l'ajouter aux *Test
+users*) ; (2) sans fenêtre de console, `connecter` n'affiche pas l'adresse de consentement (Python tamponne) : lancer
+`python -u -m publindie connecter youtube` et ouvrir l'adresse SUR LE PC (le retour va à `localhost`).
+**Les playlists de la chaîne** (lues le 4 novembre 2026 ; `playlist` d'une fiche = l'identifiant) : Pix `PLOsi4P-k85VI`,
+Original Sound Tracks `PLJXlznp1hHAA`, MarchingBlocks 0.9.0 / 0.9.2 / 0.9.3 (Devlogs) `PLLHKidQwo15g` / `PLbwBnykxZLxs` /
+`PLcQXOMg8nkdg`, HeartWorld `PLPeoP9fcSyHM`, RiverStones `PLUeTd8B9x0Gk`, **MarchingSquares `PLTlsg9yttidk`** (créée le
+4 novembre 2026 à la demande de Jordan : « il faut faire une autre playlist Marching Squares »).
+
 ### Ce qui a été vérifié sur les sources officielles — MESURÉ (lu le 21 octobre 2026)
 
 - **Bluesky** (docs.bsky.app, sources de `bluesky-social/bsky-docs` et lexiques de `bluesky-social/atproto`) : texte de
